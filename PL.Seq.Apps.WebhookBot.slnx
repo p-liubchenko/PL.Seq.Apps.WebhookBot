@@ -1,3 +1,9 @@
 <Solution>
+  <Folder Name="/github/">
+    <File Path=".github/workflows/main.yml" />
+    <File Path=".gitignore" />
+    <File Path="LICENSE.txt" />
+    <File Path="README.md" />
+  </Folder>
   <Project Path="PL.Seq.Apps.WebhookBot/PL.Seq.Apps.WebhookBot.csproj" />
 </Solution>

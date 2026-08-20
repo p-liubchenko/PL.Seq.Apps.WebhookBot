@@ -1,0 +1,94 @@
+name: Publish NuGet Package
+
+on:
+  push:
+    branches:
+      - master
+      - dev
+      - 'feature/**'
+      - 'release/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      PROJECT: PL.Seq.Apps.WebhookBot/PL.Seq.Apps.WebhookBot.csproj
+      PACKAGE_ID: PL.Seq.Apps.WebhookBot
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Extract VersionPrefix from .csproj
+        id: versioning
+        run: |
+          VERSION_PREFIX=$(grep -oP '(?<=<VersionPrefix>).*?(?=</VersionPrefix>)' "$PROJECT")
+
+          echo "VERSION_PREFIX=$VERSION_PREFIX" >> $GITHUB_ENV
+          echo "VERSION_PREFIX=$VERSION_PREFIX"
+
+          if [[ "$GITHUB_REF" == "refs/heads/dev" ]]; then
+            VERSION_SUFFIX="dev.${{ github.run_number }}"
+          elif [[ "$GITHUB_REF" == refs/heads/release/* ]]; then
+            VERSION_SUFFIX="rc.${{ github.run_number }}"
+          else
+            VERSION_SUFFIX=""
+          fi
+
+          echo "VERSION_SUFFIX=$VERSION_SUFFIX" >> $GITHUB_ENV
+          echo "VERSION=$VERSION_PREFIX${VERSION_SUFFIX:+-$VERSION_SUFFIX}" >> $GITHUB_ENV
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore /p:VersionPrefix=$VERSION_PREFIX /p:VersionSuffix=$VERSION_SUFFIX
+
+      - name: Test
+        run: |
+          # Run tests only if a test project exists (none yet — ready for when they're added).
+          if git ls-files '*[Tt]ests*.csproj' | grep -q .; then
+            dotnet test --no-restore --no-build --verbosity normal
+          else
+            echo "No test projects found; skipping."
+          fi
+
+      # Seq apps that target a concrete .NET framework must bundle their
+      # dependencies. Publish into ./obj/publish so the .csproj glob can pack
+      # those assemblies into lib/<tfm>.
+      - name: Publish (bundle dependencies)
+        run: dotnet publish "$PROJECT" --configuration Release --no-build -o PL.Seq.Apps.WebhookBot/obj/publish
+
+      - name: Check if version exists on NuGet
+        if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/heads/release/')
+        id: check_nuget
+        run: |
+          VERSION_FULL="$VERSION_PREFIX${VERSION_SUFFIX:+-$VERSION_SUFFIX}"
+          if curl --silent --fail --head "https://www.nuget.org/api/v2/package/$PACKAGE_ID/$VERSION_FULL"; then
+            echo "VERSION_EXISTS=true" >> $GITHUB_ENV
+          else
+            echo "VERSION_EXISTS=false" >> $GITHUB_ENV
+          fi
+
+      - name: Pack
+        if: env.VERSION_EXISTS == 'false' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/heads/release/'))
+        run: |
+          dotnet pack "$PROJECT" \
+            --configuration Release \
+            --no-build \
+            --output nupkg \
+            /p:VersionPrefix=$VERSION_PREFIX /p:VersionSuffix=$VERSION_SUFFIX
+
+      - name: Push to NuGet
+        if: env.VERSION_EXISTS == 'false' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/heads/release/'))
+        run: |
+          dotnet nuget push nupkg/*.nupkg \
+            --source https://api.nuget.org/v3/index.json \
+            --api-key ${{ secrets.NUGET_API_KEY }} \
+            --skip-duplicate

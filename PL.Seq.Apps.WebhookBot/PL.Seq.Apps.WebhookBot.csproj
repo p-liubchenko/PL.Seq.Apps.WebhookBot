@@ -1,11 +1,50 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+
+    <!-- Seq app package metadata. The "seq-app" tag is required for Seq to
+         recognise this NuGet package as an installable app. -->
+    <PackageId>PL.Seq.Apps.WebhookBot</PackageId>
+    <VersionPrefix>1.1.0</VersionPrefix>
+    <Authors>Paul Liubchenko</Authors>
+    <Title>Webhook Bot Notifier</Title>
+    <Description>Sends Seq alert/event notifications to a Teams Webhook Bot, rendering the message body from a Liquid template with full access to the alert and event context.</Description>
+    <PackageTags>seq-app;seq;alert;webhook;teams;liquid;notification</PackageTags>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Seq.Apps" Version="2023.4.0" />
+    <PackageReference Include="Fluid.Core" Version="2.31.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <!-- Files surfaced on the NuGet package listing. -->
+  <ItemGroup>
+    <None Include="icon.png" Pack="true" PackagePath="" Visible="false" />
+    <None Include="../README.md" Pack="true" PackagePath="" />
+    <None Include="../LICENSE.txt" Pack="true" PackagePath="" />
+  </ItemGroup>
+
+  <!--
+    Seq apps that target a concrete .NET framework (rather than netstandard2.0)
+    must ship their dependencies inside the package. The CI does `dotnet publish`
+    into ./obj/publish, and the glob below packs those assemblies into
+    lib/<tfm>. Seq.Apps and Serilog are provided by the Seq app host, so they are
+    excluded to avoid loading conflicting copies.
+    (This mirrors Datalust's own Seq.App.EmailPlus packaging.)
+  -->
+  <ItemGroup>
+    <None Include="./obj/publish/**/*"
+          Exclude="./obj/publish/$(MSBuildProjectName).dll;./obj/publish/Seq.Apps.dll;./obj/publish/Serilog.dll"
+          Pack="true"
+          PackagePath="lib/$(TargetFramework)" />
   </ItemGroup>
 
 </Project>
